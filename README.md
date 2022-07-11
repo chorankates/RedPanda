@@ -149,7 +149,7 @@ Total views: 0
 Export table
 ```
 
-and 
+and
 
 ```
 damian
@@ -165,11 +165,73 @@ the export table link points at `http://redpanda.htb:8080/export.xml?author=dami
 
 raw wget of export.xml gives
 ```
-$ cat export.xml 
+$ cat export.xml
 Error, incorrect paramenter 'author'
 ```
 
+`http://redpanda.htb:8080/img/angy.jpg` is indeed a picture of a red panda
 
+
+gobuster vhost looking for subdomains
+
+```
+Found: gc._msdcs (Status: 400) [Size: 435]
+Found: _domainkey (Status: 400) [Size: 435]
+Found: mailing._domainkey.sunnynews (Status: 400) [Size: 435]
+Found: mailing._domainkey.info (Status: 400) [Size: 435]
+Found: hallam_dev (Status: 400) [Size: 435]
+Found: hallam_ad (Status: 400) [Size: 435]
+Found: wm_j_b__ruffin (Status: 400) [Size: 435]
+Found: 2609_n_www (Status: 400) [Size: 435]
+Found: 0907_n_hn.m (Status: 400) [Size: 435]
+Found: 0507_n_hn (Status: 400) [Size: 435]
+Found: faitspare_mbp.cit (Status: 400) [Size: 435]
+Found: sb_0601388345bc6cd8 (Status: 400) [Size: 435]
+Found: sb_0601388345bc450b (Status: 400) [Size: 435]
+Found: api_portal_dev (Status: 400) [Size: 435]
+Found: api_web_dev (Status: 400) [Size: 435]
+Found: api_webi_dev (Status: 400) [Size: 435]
+Found: sklep_test (Status: 400) [Size: 435]
+```
+
+a lot of those look like garbage, but `api_portal_dev` and `api_web_dev` look like they might be real
+
+back to search - searched with `name=`, and got
+
+```
+You searched for: Greg
+There are 1 results for your search
+Panda name:
+Greg
+Panda bio:
+Greg is a hacker. Watch out for his injection attacks!
+```
+
+so, search for the filenames without extension
+`hungy` 
+
+'greg' seems to be the only result with a relevant bio - given that it is pointing at injection, going back to sqlmap
+
+
+while waiting for `--level 3` scans to complete, trying to figure out why the stats page isn't being updated as expected.
+
+```
+$ curl -X POST http://redpanda.htb:8080/stats?author=damian -d '{"uri":"/img/angy.jpg"}'
+{"timestamp":"2022-07-10T17:45:18.181+00:00","status":405,"error":"Method Not Allowed","message":"","path":"/stats"}
+```
+
+### back again
+
+wrote [caller.rb](caller.rb) to see if there were other names we were missing,
+```
+$ ruby caller.rb
+total names[18240]
+name[angy] found
+name[peter] found
+name[greg] found
+```
+
+didn't find anything new.
 
 
 ## flag
