@@ -233,6 +233,11 @@ name[greg] found
 
 didn't find anything new.
 
+POSTing `/search name=greg%2526shards%3Dhttp%3A%2F%2F10.129.192.103%2Fsolr` afer reading [https://github.com/veracode-research/solr-injection](https://github.com/veracode-research/solr-injection), [specifically](https://github.com/veracode-research/solr-injection#black-box-detection)
+
+and got a different response
+> You searched for: Error occured: banned characters
+
 
 ## flag
 ```
