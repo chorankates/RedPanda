@@ -239,7 +239,36 @@ and got a different response
 > You searched for: Error occured: banned characters
 
 
+so without `%`, can't think of any encoding attacks, which pushes us back to SQLi.
+
+quick segue to SSTI, but tplmap comes up empty
+```
+$ tplmap.py -u http://redpanda.htb:8080/export.xml?author=foo
+Tplmap 0.5
+    Automatic Server-Side Template Injection Detection and Exploitation Tool
+
+Testing if GET parameter 'author' is injectable
+Smarty plugin is testing rendering with tag '*'
+Smarty plugin is testing blind injection
+Mako plugin is testing rendering with tag '${*}'
+Mako plugin is testing blind injection
+Python plugin is testing rendering with tag 'str(*)'
+Python plugin is testing blind injection
+Tornado plugin is testing rendering with tag '{{*}}'
+Tornado plugin is testing blind injection
+Jinja2 plugin is testing rendering with tag '{{*}}'
+Jinja2 plugin is testing blind injection
+Twig plugin is testing rendering with tag '{{*}}'
+Twig plugin is testing blind injection
+Exiting: 'bool' object has no attribute 'replace'
+```
+
+same for `http://redpanda.htb:8080/stats?author=foo`. try POST on /search?
+
+worth a shot, but no luck `-u http://redpanda.htb:8080/search -X POST -d 'name=foo'`
+
 ## flag
+
 ```
 user:
 root:
