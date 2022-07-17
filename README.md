@@ -763,7 +763,7 @@ JPEG APP1 (52 bytes):
 that's why it's cleaning up `jpg`, and the last few line of `main()` that parses the redpanda.log
 ```
 addViewTo("/credits/" + artist + "_creds.xml", parsed_data.get("uri").toString());
-``` 
+```
 
 we can obviously control `artist`
 
@@ -785,7 +785,7 @@ it feels like the plan goes like this:
   * stuff a path traversal link in `redpanda.log` that points to a `jpg` we control (base path `/opt/panda_search/src/main/resources/static`
   * build a `jpg` in that location that has an `artist` exif tag that is also a path traversal (base path `/credits/ + #{artist} + _creds.xml`
   * [fuzzier] use XXE to get `/root/root.txt`
- 
+
 
 built [foo.jpg](foo.jpg)
 
@@ -821,6 +821,56 @@ gets
 404||10.10.14.9||curl/7.74.0||/.../.../.../.../.../home/woodenk/foo.jpg
 404||10.10.14.9||curl/7.74.0||/error
 ```
+
+ok, testing some theories - after stuffing `/img/greg.jpg` in to `redpanda.log`:
+```
+woodenk@redpanda:~$ java -jar /opt/credit-score/LogParser/final/target/final-1.0-jar-with-dependencies.jar
+/img/greg.jpg
+Artist: woodenk
+Exception in thread "main" java.io.FileNotFoundException: /credits/woodenk_creds.xml (Permission denied)
+        at java.base/java.io.FileInputStream.open0(Native Method)
+        at java.base/java.io.FileInputStream.open(FileInputStream.java:219)
+        at java.base/java.io.FileInputStream.<init>(FileInputStream.java:157)
+        at java.base/java.io.FileInputStream.<init>(FileInputStream.java:112)
+        at java.base/sun.net.www.protocol.file.FileURLConnection.connect(FileURLConnection.java:86)
+        at java.base/sun.net.www.protocol.file.FileURLConnection.getInputStream(FileURLConnection.java:184)
+        at java.xml/com.sun.org.apache.xerces.internal.impl.XMLEntityManager.setupCurrentEntity(XMLEntityManager.java:652)
+        at java.xml/com.sun.org.apache.xerces.internal.impl.XMLVersionDetector.determineDocVersion(XMLVersionDetector.java:150)
+        at java.xml/com.sun.org.apache.xerces.internal.parsers.XML11Configuration.parse(XML11Configuration.java:860)
+        at java.xml/com.sun.org.apache.xerces.internal.parsers.XML11Configuration.parse(XML11Configuration.java:824)
+        at java.xml/com.sun.org.apache.xerces.internal.parsers.XMLParser.parse(XMLParser.java:141)
+        at java.xml/com.sun.org.apache.xerces.internal.parsers.AbstractSAXParser.parse(AbstractSAXParser.java:1216)
+        at java.xml/com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser.parse(SAXParserImpl.java:635)
+        at org.jdom2.input.sax.SAXBuilderEngine.build(SAXBuilderEngine.java:217)
+        at org.jdom2.input.sax.SAXBuilderEngine.build(SAXBuilderEngine.java:277)
+        at org.jdom2.input.sax.SAXBuilderEngine.build(SAXBuilderEngine.java:264)
+        at org.jdom2.input.SAXBuilder.build(SAXBuilder.java:1104)
+        at com.logparser.App.addViewTo(App.java:67)
+        at com.logparser.App.main(App.java:105)
+```
+
+and
+
+```
+woodenk@redpanda:~$ cat /opt/panda_search/redpanda.log
+
+404||10.10.14.9||curl/7.74.0||/home/woodenk/foo.jpg
+404||10.10.14.9||curl/7.74.0||/error
+woodenk@redpanda:~$ java -jar /opt/credit-score/LogParser/final/target/final-1.0-jar-with-dependencies.jar
+/home/woodenk/foo.jpg
+Exception in thread "main" java.io.FileNotFoundException: /opt/panda_search/src/main/resources/static/home/woodenk/foo.jpg (No such file or directory)
+        at java.base/java.io.FileInputStream.open0(Native Method)
+        at java.base/java.io.FileInputStream.open(FileInputStream.java:219)
+        at java.base/java.io.FileInputStream.<init>(FileInputStream.java:157)
+        at com.drew.imaging.jpeg.JpegMetadataReader.readMetadata(JpegMetadataReader.java:90)
+        at com.drew.imaging.jpeg.JpegMetadataReader.readMetadata(JpegMetadataReader.java:104)
+        at com.logparser.App.getArtist(App.java:45)
+        at com.logparser.App.main(App.java:102)
+```
+
+ok assumptions are correct
+
+
 
 ## flag
 
