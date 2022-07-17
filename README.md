@@ -561,6 +561,227 @@ drwxrwxr-x  5 root root 4096 Jun 14 14:35 panda_search
 
 hmm - is `credit-score` another site? what's `cleanup.sh`?
 
+```
+[21:20:41] ==> cat /opt/cleanup.sh
+/usr/bin/find /tmp -name &quot;*.xml&quot; -exec rm -rf {} \;
+/usr/bin/find /var/tmp -name &quot;*.xml&quot; -exec rm -rf {} \;
+/usr/bin/find /dev/shm -name &quot;*.xml&quot; -exec rm -rf {} \;
+/usr/bin/find /home/woodenk -name &quot;*.xml&quot; -exec rm -rf {} \;
+/usr/bin/find /tmp -name &quot;*.jpg&quot; -exec rm -rf {} \;
+/usr/bin/find /var/tmp -name &quot;*.jpg&quot; -exec rm -rf {} \;
+/usr/bin/find /dev/shm -name &quot;*.jpg&quot; -exec rm -rf {} \;
+/usr/bin/find /home/woodenk -name &quot;*.jpg&quot; -exec rm -rf {} \;
+```
+
+removing `jpg` and `xml` from `/home/woodenk`?
+
+taking a quick sidetrack to get `panda_search-0.0.1-SNAPSHOT.jar` - see the html that drives the site, and the red panda images, but think we've gotten what we need out of it
+
+and also
+```
+[21:55:10] ==> cp /opt/credit-score/LogParser/final/target/final-1.0-jar-with-dependencies.jar .
+```
+
+```java
+public class App {
+    public static Map parseLog(String line) {
+        String[] strings = line.split("\\|\\|");
+        Map map = new HashMap();
+        map.put("status_code", Integer.valueOf(Integer.parseInt(strings[0])));
+        map.put("ip", strings[1]);
+        map.put("user_agent", strings[2]);
+        map.put("uri", strings[3]);
+        return map;
+    }
+
+    public static boolean isImage(String filename) {
+        if (filename.contains(".jpg")) {
+            return true;
+        }
+        return false;
+    }
+
+    public static String getArtist(String uri) throws IOException, JpegProcessingException {
+        for (Directory dir : JpegMetadataReader.readMetadata(new File("/opt/panda_search/src/main/resources/static" + uri)).getDirectories()) {
+            Iterator<Tag> it = dir.getTags().iterator();
+            while (true) {
+                if (it.hasNext()) {
+                    Tag tag = it.next();
+                    if (tag.getTagName() == "Artist") {
+                        return tag.getDescription();
+                    }
+                }
+            }
+        }
+        return "N/A";
+    }
+
+    public static void addViewTo(String path, String uri) throws JDOMException, IOException {
+        SAXBuilder saxBuilder = new SAXBuilder();
+        XMLOutputter xmlOutput = new XMLOutputter();
+        xmlOutput.setFormat(Format.getPrettyFormat());
+        File fd = new File(path);
+        Document doc = saxBuilder.build(fd);
+        Element rootElement = doc.getRootElement();
+        for (Element el : rootElement.getChildren()) {
+            if (el.getName() == "image" && el.getChild("uri").getText().equals(uri)) {
+                Integer totalviews = Integer.valueOf(Integer.parseInt(rootElement.getChild("totalviews").getText()) + 1);
+                System.out.println("Total views:" + Integer.toString(totalviews.intValue()));
+                rootElement.getChild("totalviews").setText(Integer.toString(totalviews.intValue()));
+                el.getChild("views").setText(Integer.toString(Integer.valueOf(Integer.parseInt(el.getChild("views").getText())).intValue() + 1));
+            }
+        }
+        xmlOutput.output(doc, new BufferedWriter(new FileWriter(fd)));
+    }
+
+    public static void main(String[] args) throws JDOMException, IOException, JpegProcessingException {
+        Scanner log_reader = new Scanner(new File("/opt/panda_search/redpanda.log"));
+        while (log_reader.hasNextLine()) {
+            String line = log_reader.nextLine();
+            if (isImage(line)) {
+                Map parsed_data = parseLog(line);
+                System.out.println(parsed_data.get("uri"));
+                String artist = getArtist(parsed_data.get("uri").toString());
+                System.out.println("Artist: " + artist);
+                addViewTo("/credits/" + artist + "_creds.xml", parsed_data.get("uri").toString());
+            }
+        }
+    }
+}
+```
+
+so the JPGs are where we expected them based on the jar.
+
+also see that `/opt/panda_search/redpanda.log` is used statically
+
+... while looking around for that, noticed that umask is `0755`, which is a problem for .ssh.. setting it to 0700
+
+```
+$ ssh -i redpanda -l woodenk redpanda.htb
+Warning: Permanently added 'redpanda.htb,10.10.11.170' (ECDSA) to the list of known hosts.
+Welcome to Ubuntu 20.04.4 LTS (GNU/Linux 5.4.0-121-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+  System information as of Sun 17 Jul 2022 10:01:41 PM UTC
+
+  System load:           0.56
+  Usage of /:            81.3% of 4.30GB
+  Memory usage:          42%
+  Swap usage:            0%
+  Processes:             213
+  Users logged in:       0
+  IPv4 address for eth0: 10.10.11.170
+  IPv6 address for eth0: dead:beef::250:56ff:feb9:e77d
+
+
+0 updates can be applied immediately.
+
+
+The list of available updates is more than a week old.
+To check for new updates run: sudo apt update
+Failed to connect to https://changelogs.ubuntu.com/meta-release-lts. Check your Internet connection or proxy settings
+
+
+Last login: Tue Jul  5 05:51:25 2022 from 10.10.14.23
+woodenk@redpanda:~$
+```
+
+a real shell.
+
+kicking linpeas
+
+```
+╔══════════╣ CVEs Check
+Vulnerable to CVE-2021-3560
+
+
+╔══════════╣ Any sd*/disk* disk in /dev? (limit 20)
+disk
+sda
+sda1
+sda2
+sda3
+
+
+╔══════════╣ Active Ports
+╚ https://book.hacktricks.xyz/linux-hardening/privilege-escalation#open-ports
+tcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      -
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      -
+tcp        0      0 0.0.0.0:8000            0.0.0.0:*               LISTEN      -
+tcp        0      0 127.0.0.1:33060         0.0.0.0:*               LISTEN      -
+tcp        0      0 127.0.0.1:3306          0.0.0.0:*               LISTEN      -
+tcp6       0      0 :::8080                 :::*                    LISTEN      -
+tcp6       0      0 :::22                   :::*                    LISTEN      -
+
+╔══════════╣ Unexpected in root
+/credits
+
+```
+
+
+```
+woodenk@redpanda:~$ ls -la /credits/
+ls: cannot open directory '/credits/': Permission denied
+woodenk@redpanda:~$ ls -ld /credits/
+drw-r-x--- 2 root logs 4096 Jun 21 12:32 /credits/
+```
+
+the CVE looks like a red herring as
+```
+woodenk@redpanda:~$ bash poc.sh
+
+[!] Username set as : secnigma
+[!] No Custom Timing specified.
+[!] Timing will be detected Automatically
+[!] Force flag not set.
+[!] Vulnerability checking is ENABLED!
+[!] Starting Vulnerability Checks...
+[!] Checking distribution...
+[!] Detected Linux distribution as ubuntu
+[!] Checking if Accountsservice and Gnome-Control-Center is installed
+[x] ERROR: Accounts service and Gnome-Control-Center NOT found!!
+[!]  Aborting Execution!
+```
+
+pkiexec is here, dbus is running - so a later version of the exploit might work.
+
+but.. given `cleanup.sh`, think this is about poisoning JPG metadata
+
+```
+$ meta_exif greg.jpg
+...
+JPEG APP1 (52 bytes):
+  ExifByteOrder = MM
+  + [IFD0 directory with 2 entries]
+  | 0)  Orientation = 1
+  | 1)  Artist = woodenk
+```
+
+that's why it's cleaning up `jpg`, and the last few line of `main()` that parses the redpanda.log
+```
+addViewTo("/credits/" + artist + "_creds.xml", parsed_data.get("uri").toString());
+``` 
+
+we can obviously control `artist`
+
+
+and after searching for 'greg',
+```
+[21:55:10] ==> cat /opt/panda_search/redpanda.log
+200||10.10.14.9||Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0||/
+304||10.10.14.9||Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0||/css/main.css
+304||10.10.14.9||Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0||/css/panda.css
+200||10.10.14.9||Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0||/search
+200||10.10.14.9||Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0||/css/search.css
+304||10.10.14.9||Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0||/img/greg.jpg
+```
+
+
+
+
 ## flag
 
 ```
