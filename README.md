@@ -779,7 +779,13 @@ and after searching for 'greg',
 304||10.10.14.9||Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0||/img/greg.jpg
 ```
 
+### the next step
 
+it feels like the plan goes like this:
+  * stuff a path transversal link in `redpanda.log` that points to a `jpg` we control (base path `/opt/panda_search/src/main/resources/static`
+  * build a `jpg` in that location that has an `artist` exif tag that is also a path transversal (base path `/credits/ + #{artist} + _creds.xml`
+  * [fuzzier] use XXE to get `/root/root.txt`
+ 
 
 
 ## flag
