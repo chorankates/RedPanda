@@ -870,6 +870,13 @@ Exception in thread "main" java.io.FileNotFoundException: /opt/panda_search/src/
 
 ok assumptions are correct
 
+thinking more about this - since they have to read the XML in order to increment values, and don't see any perms management, we can prebuild the poisoned artist XML file with XXE.
+
+`foo.jpg` currently points at `../foo`, which would translate to `/credits/../foo_creds.xml`, but we can't write to that either
+
+so we really need to point at `../home/woodenk/foo`, which `/credits/../home/woodenk/foo_creds.xml`
+
+and if we stage the XXE, we don't need to worry about perms problems. [foo_creds.xml](foo_creds.xml)
 
 
 ## flag
