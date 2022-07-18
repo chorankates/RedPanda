@@ -1,5 +1,15 @@
 # [01 - RedPanda](https://app.hackthebox.com/machines/RedPanda)
 
+  * [description](#description)
+  * [walkthrough](#walkthrough)
+    * [recon](#recon)
+    * [8080](#8080)
+    * [back again](#back-again)
+    * [ssti](#ssti)
+    * [coming back](#coming-back)
+    * [the next step](#the-next-step)
+    * [code auditing ftw](#code-auditing-ftw)
+  * [flag](#flag)
 ## description
 > 10.129.193.227
 
