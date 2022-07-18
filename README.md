@@ -351,7 +351,7 @@ need to figure out what the engine is before continuing to shoot in the dark
 
 ### coming back
 
-took down trick this morning, trying to ride that.
+took down [trick](https://github.com/chorankates/ctf/tree/master/hackthebox.eu/machines/37-Trick) this morning, trying to ride that.
 
 still need to identify the engine - searching just "spring boot ssti", the first link is for [https://www.acunetix.com/blog/web-security-zone/exploiting-ssti-in-thymeleaf/](https://www.acunetix.com/blog/web-security-zone/exploiting-ssti-in-thymeleaf/)
 
@@ -654,7 +654,7 @@ so the JPGs are where we expected them based on the jar.
 
 also see that `/opt/panda_search/redpanda.log` is used statically
 
-... while looking around for that, noticed that umask is `0755`, which is a problem for .ssh.. setting it to 0700
+... while looking around for that, noticed that umask is `0755`, which is a problem for .ssh.. setting it to `0700`
 
 ```
 $ ssh -i redpanda -l woodenk redpanda.htb
@@ -980,8 +980,105 @@ it it removing `.xml` and `.jpg` from
 
 but if the issue is the relative path, they all have the same problem.
 
+said we didn't have access to the source code for panda_search - this is not true. we don't have it via decompilation like we do for logparser, but the sources we care about are just on disk:
+```
+woodenk@redpanda:~$ ls /opt/panda_search/src/main/java/com/panda_search/htb/panda_search/
+MainController.java  PandaSearchApplication.java  RequestInterceptor.java
+```
+
+where are the descriptions of the pandas coming from? that's got to be the mysql endpoint(s), because they are not in the jpgs
+
+from panda_search source:
+  * how is `redpanda.log` being written?
+  * how is mysql used?
 
 
+and it would appear both answers are obtainable.
+
+```
+            conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/red_panda", "woodenk", "RedPandazRule");
+```
+
+using that, get to 
+```
+woodenk@redpanda:~$ mysql -p
+mysql> show databases;
+mysql> use red_panda;
+mysql> show tables;
+mysql> select * from pandas;
++----------+------------------------------------------------------------------------------------+------------------+---------+
+| name     | bio                                                                                | imgloc           | author  |
++----------+------------------------------------------------------------------------------------+------------------+---------+
+| Smooch   | Smooch likes giving kisses and hugs to everyone!                                   | img/smooch.jpg   | woodenk |
+| Hungy    | Hungy is always hungry so he is eating all the bamboo in the world!                | img/hungy.jpg    | woodenk |
+| Greg     | Greg is a hacker. Watch out for his injection attacks!                             | img/greg.jpg     | woodenk |
+| Mr Puffy | Mr Puffy is the fluffiest red panda to have ever lived.                            | img/mr_puffy.jpg | damian  |
+| Florida  | Florida panda is the evil twin of Greg. Watch out for him!                         | img/florida.jpg  | woodenk |
+| Lazy     | Lazy is always very sleepy so he likes to lay around all day and do nothing.       | img/lazy.jpg     | woodenk |
+| Shy      | Shy is as his name suggest very shy. But he likes to cuddle when he feels like it. | img/shy.jpg      | damian  |
+| Smiley   | Smiley is always very happy. She loves to look at beautiful people like you !      | img/smiley.jpg   | woodenk |
+| Angy     | Angy is always very grumpy. He sticks out his tongue to everyone.                  | img/angy.jpg     | damian  |
+| Peter    | Peter loves to climb. We think he was a spider in his previous life.               | img/peter.jpg    | damian  |
+| Crafty   | Crafty is always busy creating art. They will become a very famous red panda!      | img/crafty.jpg   | damian  |
++----------+------------------------------------------------------------------------------------+------------------+---------+
+11 rows in set (0.00 sec)
+```
+
+but.. for woodenk, we only see `greg`, `hungy`, `smooch` and `smiley`, where are `florida` and `lazy` coming from?
+similarly, for damian, we only see `angy`, `shy`, `crafty`, and `peter`, where is `mr_puffy` coming from?
+
+the images do exist, but don't show up on the scoreboard. rabbit hole?
+
+```java
+  @GetMapping(value="/export.xml", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+	public @ResponseBody byte[] exportXML(@RequestParam(name="author", defaultValue="err") String author) throws IOException {
+
+		System.out.println("Exporting xml of: " + author);
+		if(author.equals("woodenk") || author.equals("damian"))
+		{
+			InputStream in = new FileInputStream("/credits/" + author + "_creds.xml");
+			System.out.println(in);
+			return IOUtils.toByteArray(in);
+		}
+		else
+		{
+			return IOUtils.toByteArray("Error, incorrect paramenter 'author'\n\r");
+		}
+	}
+```
+
+if we are going the path of exfil via `export.xml`, then we can only use `woodenk` or `damian` as the author. 
+
+
+```java
+    @Override
+    public void afterCompletion (HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+        System.out.println("interceptor#postHandle called. Thread: " + Thread.currentThread().getName());
+        String UserAgent = request.getHeader("User-Agent");
+        String remoteAddr = request.getRemoteAddr();
+        String requestUri = request.getRequestURI();
+        Integer responseCode = response.getStatus();
+        /*System.out.println("User agent: " + UserAgent);
+        System.out.println("IP: " + remoteAddr);
+        System.out.println("Uri: " + requestUri);
+        System.out.println("Response code: " + responseCode.toString());*/
+        System.out.println("LOG: " + responseCode.toString() + "||" + remoteAddr + "||" + UserAgent + "||" + requestUri);
+        FileWriter fw = new FileWriter("/opt/panda_search/redpanda.log", true);
+        BufferedWriter bw = new BufferedWriter(fw);
+        bw.write(responseCode.toString() + "||" + remoteAddr + "||" + UserAgent + "||" + requestUri + "\n");
+        bw.close();
+    }
+}
+```
+
+and this is how `redpanda.log` is being built, nothing we didn't already know
+
+also, it looks like the mysql instance running on 3306 has the same contents as the one running on 33060, so.. not a path either
+
+```
+mysql> insert into pandas values ('foo', "papa was a rolling stone", "../../../../../../../home/woodenk/foo.jpg", "woodenk");
+ERROR 1406 (22001): Data too long for column 'imgloc' at row 1
+```
 
 ## flag
 
